@@ -1,0 +1,46 @@
+
+@import "@fontsource-variable/inter";
+@import "tailwindcss";
+
+/* API Monitor - Design System v1.2 */
+@theme {
+  /* Typography */
+  --font-sans: "Inter Variable", Inter, system-ui, sans-serif;
+
+  /* Background */
+  --color-surface: #090e1a;
+  --color-panel: #0f172a;
+  --color-panel-hover: #1e293b;
+
+  /* Border */
+  --color-line: #263244;
+
+  /* Text */
+  --color-ink: #e2e8f0;
+  --color-muted: #94a3b8;
+
+  /* Brand */
+  --color-brand: #3b82f6;
+  --color-brand-hover: #2563eb;
+
+  /* API Status */
+  --color-up: #22c55e;
+  --color-down: #ef4444;
+  --color-warning: #f59e0b;
+
+  /* Component Styles */
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100dvh;
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
