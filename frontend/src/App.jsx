@@ -9,7 +9,11 @@ import ProjectDetail from "./pages/ProjectDetail";
 import Requests from "./pages/Requests";
 import ProjectRequests from "./pages/ProjectRequests";
 import RequestStudio from "./pages/RequestStudio";
-import PlaceholderPage from "./pages/PlaceholderPage";
+import Monitors from "./pages/Monitors";
+import MonitorDetail from "./pages/MonitorDetail";
+import Incidents from "./pages/Incidents";
+import IncidentDetail from "./pages/IncidentDetail";
+import Notifications from "./pages/Notifications";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
@@ -19,7 +23,6 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route index element={<Dashboard />} />
@@ -29,11 +32,13 @@ export default function App() {
             <Route path="workspaces/:workspaceId/projects/:projectId/requests" element={<ProjectRequests />} />
             <Route path="workspaces/:workspaceId/projects/:projectId/requests/:requestId" element={<RequestStudio />} />
             <Route path="requests" element={<Requests />} />
-            <Route path="monitors" element={<PlaceholderPage title="Monitors" />} />
-            <Route path="incidents" element={<PlaceholderPage title="Incidents" />} />
+            <Route path="monitors" element={<Monitors />} />
+            <Route path="monitors/:monitorId" element={<MonitorDetail />} />
+            <Route path="incidents" element={<Incidents />} />
+            <Route path="incidents/:incidentId" element={<IncidentDetail />} />
+            <Route path="notifications" element={<Notifications />} />
           </Route>
         </Route>
-
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
