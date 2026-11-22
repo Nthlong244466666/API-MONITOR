@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { index, show } from '../controllers/incident.controller.js';
-
+import { analyze, index as analyses, show as analysisDetail } from '../controllers/aiAnalysis.controller.js';
 const router = Router();
 router.use(requireAuth);
 router.get('/', index);
+router.post('/:incidentId/analyze', analyze);
+router.get('/:incidentId/analyses', analyses);
+router.get('/:incidentId/analyses/:analysisId', analysisDetail);
 router.get('/:incidentId', show);
 export default router;

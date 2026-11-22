@@ -5,6 +5,7 @@ import PageHeader from "../components/layout/PageHeader";
 import { useAuth } from "../contexts/AuthContext";
 import { createIncidentApi } from "../services/incidentApi";
 import IncidentStatusBadge from "../components/notifications/IncidentStatusBadge";
+import IncidentAiPanel from "../components/ai/IncidentAiPanel";
 const stamp = (v) => v ? new Date(v).toLocaleString("vi-VN") : "—";
 export default function IncidentDetail() {
   const { incidentId } = useParams();
@@ -43,6 +44,7 @@ export default function IncidentDetail() {
         </div>
         <div className="flex flex-wrap gap-2 border-t border-line pt-4"><Link to={`/monitors/${encodeURIComponent(item.monitorId)}`} className="rounded-lg border border-line px-3 py-2 text-sm text-brand hover:bg-panel-hover">Xem Monitor</Link><button type="button" onClick={refresh} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-ink hover:bg-panel-hover disabled:opacity-50"><RefreshCw size={15}/> Làm mới</button></div>
       </section>}
+      {item && <IncidentAiPanel key={item.id} incidentId={item.id} />}
     </div>
   </>;
 }

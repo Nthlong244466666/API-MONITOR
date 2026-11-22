@@ -237,6 +237,7 @@ model MonitorCheck {
 // =============================================
 
 model Incident {
+  analyses IncidentAnalysis[]
   id         String         @id @default(uuid()) @db.Uuid
   monitorId  String         @map("monitor_id") @db.Uuid
   status     IncidentStatus @default(OPEN)
@@ -289,4 +290,17 @@ model AuthSession {
   @@index([expiresAt])
   @@index([absoluteExpiresAt])
   @@map("auth_sessions")
+}
+
+// AI v3.0: saved diagnostic metadata only, never raw request secrets.
+model IncidentAnalysis {
+  id         String   @id @default(uuid()) @db.Uuid
+  incidentId String   @map("incident_id") @db.Uuid
+  model      String   @db.VarChar(100)
+  diagnosis  Json
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  incident Incident @relation(fields:[incidentId],references:[id],onDelete:Cascade)
+  @@index([incidentId,createdAt])
+  @@map("incident_analyses")
 }

@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {buildAiContext,normalizeDiagnosis,safeCheck} from '../src/lib/aiDiagnosis.js';
+const check={checkedAt:new Date('2026-11-21T00:00:00Z'),statusCode:503,responseTimeMs:120,isSuccess:false,errorMessage:'TIMEOUT',headers:{authorization:'secret'},url:'https://private',body:'secret'};
+test('safeCheck excludes URL headers body',()=>{const x=safeCheck(check);assert.equal(x.statusCode,503);assert.ok(!JSON.stringify(x).includes('secret'));assert.ok(!JSON.stringify(x).includes('private'));});
+test('safeCheck allowlists codes',()=>assert.equal(safeCheck({...check,errorMessage:'Authorization: secret'}).errorCode,null));
+test('safeCheck nulls malformed latency',()=>assert.equal(safeCheck({...check,responseTimeMs:'10'}).responseTimeMs,null));
+test('buildAiContext excludes monitor name and secrets',()=>{const x=buildAiContext({status:'OPEN',reason:'MONITOR_FAILURE_THRESHOLD',startedAt:new Date('2026-11-21Z'),resolvedAt:null,monitor:{status:'DOWN',failureThreshold:2,recoveryThreshold:2,intervalSeconds:60,url:'secret'}},[check]);assert.equal(x.checks.length,1);assert.ok(!JSON.stringify(x).includes('secret'));});
+test('buildAiContext caps checks',()=>{const obj={status:'OPEN',reason:'X',startedAt:new Date('2026-11-21Z'),monitor:{status:'DOWN'}};assert.equal(buildAiContext(obj,Array(30).fill(check)).checks.length,12);});
+const good={summary:'Lỗi 503',confidence:'LOW',possibleCauses:['Backend quá tải'],recommendedActions:['Kiểm tra logs'],evidence:[],limitations:['Chưa có logs']};
+test('normalize valid diagnosis',()=>assert.equal(normalizeDiagnosis(good).confidence,'LOW'));
+test('reject absent summary',()=>assert.throws(()=>normalizeDiagnosis({...good,summary:''})));
+test('reject missing actions',()=>assert.throws(()=>normalizeDiagnosis({...good,recommendedActions:[]})));
+test('fallback unknown confidence',()=>assert.equal(normalizeDiagnosis({...good,confidence:'CERTAIN'}).confidence,'LOW'));
+test('caps string arrays',()=>assert.equal(normalizeDiagnosis({...good,possibleCauses:Array(30).fill('x')}).possibleCauses.length,6));
