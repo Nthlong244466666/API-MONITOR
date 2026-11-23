@@ -7,6 +7,17 @@ import { withExecutionSlot } from '../middleware/executionLimit.middleware.js';
 import { safeFailureCode, stateAfterCheck } from '../lib/monitorRules.js';
 import { incidentEvent, incidentReason, notificationMessage } from '../lib/incidentTransition.js';
 
+// Insert delivery jobs atomically with the Notification. Push network delivery
+// happens later in a separate worker, never inside this transaction.
+async function queuePushForNotification(tx, userId, notificationId) {
+  const subs = await tx.pushSubscription.findMany({ where: { userId }, select: { id: true } });
+  if (!subs.length) return;
+  await tx.pushDelivery.createMany({
+    data: subs.map(({ id }) => ({ notificationId, subscriptionId: id })),
+    skipDuplicates: true,
+  });
+}
+
 // Idempotent transitions; a partial unique index in schema.prisma additionally
 // enforces at most one OPEN incident per monitor across processes.
 async function writeMonitorCheck(monitorId, outcome) {
@@ -44,13 +55,15 @@ async function writeMonitorCheck(monitorId, outcome) {
               data: { monitorId, status: 'OPEN', reason: incidentReason() },
               select: { id: true },
             });
-            await tx.notification.create({
+            const notice = await tx.notification.create({
               data: {
                 incidentId: incident.id,
                 userId: latest.request.project.workspace.ownerId,
                 type: 'OPENED', message: notificationMessage('OPENED'),
               },
+              select: { id: true },
             });
+            await queuePushForNotification(tx, latest.request.project.workspace.ownerId, notice.id);
           }
         } else if (next.status === 'UP' && latest.status !== 'UP') {
           // Also handles disabled/re-enabled monitors: status may be UNKNOWN
@@ -64,13 +77,15 @@ async function writeMonitorCheck(monitorId, outcome) {
               data: { status: 'RESOLVED', resolvedAt: new Date() },
             });
             if (closed.count === 1) {
-              await tx.notification.create({
+              const notice = await tx.notification.create({
                 data: {
                   incidentId: openIncident.id,
                   userId: latest.request.project.workspace.ownerId,
                   type: 'RESOLVED', message: notificationMessage('RESOLVED'),
                 },
+                select: { id: true },
               });
+              await queuePushForNotification(tx, latest.request.project.workspace.ownerId, notice.id);
             }
           }
         }

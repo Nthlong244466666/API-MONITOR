@@ -10,6 +10,8 @@ import monitorRoutes from './routes/monitor.routes.js';
 import incidentRoutes from './routes/incident.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
+import pushRoutes from './routes/push.routes.js';
+import { startPushDeliveryWorker } from './jobs/pushDelivery.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { startSessionCleanup } from './jobs/sessionCleanup.js';
 
@@ -25,6 +27,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/monitors', monitorRoutes);
 app.use('/api/v1/incidents', incidentRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/push', pushRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/workspaces/:workspaceId/projects/:projectId/requests', requestRoutes);
 app.use('/api/v1/workspaces/:workspaceId/projects', projectRoutes);
@@ -35,4 +38,5 @@ if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEBUG_ROUTES ==
 app.use((_req, res) => res.status(404).json({ success: false, error: { code: 'ROUTE_NOT_FOUND', message: 'API endpoint not found' } }));
 app.use(errorHandler);
 startSessionCleanup();
+startPushDeliveryWorker();
 export default app;

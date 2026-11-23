@@ -1,0 +1,15 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { isTrustedPushEndpoint, validPushKey, retryDelayMs, pushPayload, isPermanentPushError } from '../src/lib/pushRules.js';
+test('allow FCM', () => assert.equal(isTrustedPushEndpoint('https://fcm.googleapis.com/fcm/send/abc'), true));
+test('allow Firefox', () => assert.equal(isTrustedPushEndpoint('https://updates.push.services.mozilla.com/wpush/v2/abc'), true));
+test('allow Apple', () => assert.equal(isTrustedPushEndpoint('https://web.push.apple.com/abc'), true));
+test('deny localhost SSRF', () => assert.equal(isTrustedPushEndpoint('https://127.0.0.1/admin'), false));
+test('deny arbitrary endpoint', () => assert.equal(isTrustedPushEndpoint('https://evil.example/send'), false));
+test('deny HTTP', () => assert.equal(isTrustedPushEndpoint('http://fcm.googleapis.com/a'), false));
+test('deny forged subdomain', () => assert.equal(isTrustedPushEndpoint('https://web.push.apple.com.evil.org/a'), false));
+test('validate push keys', () => { assert.ok(validPushKey('abcDEF123_-')); assert.equal(validPushKey('bad secret'), false); });
+test('retry backoff bounded', () => { assert.equal(retryDelayMs(0), 15000); assert.ok(retryDelayMs(20) <= 900000); });
+test('status classification', () => { assert.ok(isPermanentPushError(410)); assert.equal(isPermanentPushError(503), false); });
+test('safe OPENED payload', () => { const p=pushPayload({id:'abc',incidentId:'e6cadc68-6c0e-4f82-956d-f7956e49b5c2',type:'OPENED'}); assert.match(p.url,/^\/incidents\//); assert.doesNotMatch(JSON.stringify(p),/secret|token|https:\/\//); });
+test('safe RESOLVED payload', () => assert.match(pushPayload({id:'def',incidentId:'123',type:'RESOLVED'}).title,/phục hồi/));

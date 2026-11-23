@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Bell, CheckCheck, RefreshCw } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
+import PushSettings from "../components/push/PushSettings";
 import { useAuth } from "../contexts/AuthContext";
 import { createNotificationApi } from "../services/notificationApi";
 import { incidentDetailPath } from "../services/incidentApi";
@@ -55,6 +56,7 @@ export default function Notifications() {
   return <>
     <PageHeader title="Notifications" />
     <div className="space-y-5">
+      <PushSettings />
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="flex items-center gap-2 text-lg font-semibold text-ink"><Bell size={20} className="text-brand"/> Trung tâm thông báo</h2><p className="mt-1 text-sm text-muted">Theo dõi sự cố OPENED và RESOLVED.</p></div>
         <div className="flex flex-wrap gap-2"><button type="button" className={control} disabled={loading} onClick={refresh}><RefreshCw size={15} className="mr-1 inline"/> Làm mới</button><button type="button" className={control} disabled={busy || loading || !unread} onClick={markAll}><CheckCheck size={15} className="mr-1 inline"/> Đọc tất cả</button></div>
       </div>

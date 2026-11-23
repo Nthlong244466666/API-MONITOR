@@ -1,69 +1,79 @@
-# API Monitor v3.0 — Gemini Free Tier (Backend + Frontend)
+# API Monitor v3.1 — Web Push Notifications (Backend + Frontend)
 
-## 0. Kết quả và giới hạn
+## Mục tiêu & giới hạn
 
-- Đã chạy **18/18 unit tests** về bảo vệ metadata và chuẩn hóa AI output; đã kiểm tra `node --check` các file JS Backend. Đã thử script vá Prisma schema trên schema mẫu.
-- **Chưa chạy integration** với PostgreSQL, Prisma CLI, Vite của máy bạn hoặc gọi Gemini API thật (không có API key). Do đó chưa thể nhận xét AI trả lời đúng với sự cố thực tế.
-- Mặc định AI chạy **on-demand**, tối đa **5 phân tích mỗi Incident**, **ít nhất 60 giây** giữa hai lần, ngăn phân tích đồng thời cùng một Incident trong cùng process. Đây là mức giới hạn phục vụ demo, không thay thế distributed rate limit/billing guard khi triển khai production.
-- Context chỉ gửi status, reason (mã cho phép), thời điểm, thông số monitoring và tối đa 12 MonitorCheck: HTTP code, latency, boolean, error code whitelist. **Không gửi URL, tên Monitor, headers, body, tokens, request payload**. Nội dung AI là giả thuyết và hướng chẩn đoán.
+- Gửi thông báo hệ thống khi Incident OPENED và RESOLVED, ngay cả khi tab đã đóng nếu trình duyệt/hệ điều hành hỗ trợ background Push.
+- Miễn phí: dùng Browser Push API + VAPID + `web-push`, không dùng SMS, email, Firebase paid hay Gemini cho bước gửi.
+- Backend/Scheduler/PostgreSQL phải luôn hoạt động và laptop không Sleep. Khi click notification để mở trang chi tiết trên `localhost:5173`, Frontend Vite cũng phải đang chạy (hoặc bản build được phục vụ tại cùng origin). Push còn phụ thuộc kết nối mạng, quyền trình duyệt, chính sách Windows và dịch vụ push bên ngoài; không cam kết thời gian tức thì tuyệt đối.
+- **Đừng đăng xuất** để test đóng tab: đăng xuất sẽ tự hủy subscription để bảo vệ tài khoản trên máy dùng chung.
+- Chrome `http://localhost:5173` thường hoạt động vì localhost là secure context. Truy cập `http://192.168.x.x` từ điện thoại thường KHÔNG hoạt động (cần HTTPS); iOS yêu cầu Home Screen web app theo hỗ trợ nền tảng.
 
-## 1. File trong ZIP
+## Các file trong ZIP
 
-```text
-backend/
-  .env.ai.example                         MỚI (ví dụ, không chứa key thật)
-  scripts/apply-ai-schema.mjs             MỚI (thêm model vào schema hiện có)
-  src/lib/aiDiagnosis.js                 MỚI
-  src/services/aiProvider.service.js     MỚI
-  src/services/incidentAnalysis.service.js MỚI
-  src/validators/aiAnalysis.validator.js MỚI
-  src/controllers/aiAnalysis.controller.js MỚI
-  src/routes/incident.routes.js          SỬA
-  test/aiDiagnosis.test.js               MỚI
-frontend/
-  src/pages/IncidentDetail.jsx           SỬA
-  src/services/aiAnalysisApi.js           MỚI
-  src/components/ai/AiDiagnosis.jsx       MỚI
-  src/components/ai/IncidentAiPanel.jsx   MỚI
-```
+**Sửa**:
+- `backend/src/app.js` — thêm `/api/v1/push` và khởi động worker
+- `backend/src/services/monitorRunner.service.js` — queue PushDelivery cùng transaction tạo Notification, không gọi mạng trong transaction
+- `frontend/src/pages/Notifications.jsx` — thêm PushSettings
+- `frontend/src/contexts/AuthContext.jsx` — hủy subscription khi sign out
 
-Các file còn lại không bị thay đổi. **Không copy nguyên thư mục `backend`/`frontend` đè lên dự án**; chỉ gộp các file được liệt kê. Sao lưu `incident.routes.js`, `IncidentDetail.jsx` và database trước.
+**Thêm**:
+- `backend/src/lib/pushRules.js`, `validators/push.validator.js`, `services/pushSubscription.service.js`, `controllers/push.controller.js`, `routes/push.routes.js`, `jobs/pushDelivery.js`
+- `backend/scripts/apply-push-schema.mjs`, `backend/test/pushRules.test.js`, `backend/.env.push.example`
+- `frontend/src/services/pushApi.js`, `services/pushClient.js`, `components/push/PushSettings.jsx`, `frontend/public/push-sw.js`
 
-## 2. Thiết lập Backend
+**Không sửa** `notification.service.js`: hệ thống Notification v2.1 đang PASS được giữ nguyên. **Không sửa** Prisma schema bằng ghi đè: script vá thêm hai model.
 
-**2.1.** Giải nén ZIP, copy thư mục `backend/src`, `backend/scripts`, `backend/test` vào thư mục Backend trong dự án. Copy `.env.ai.example` chỉ để tham khảo; **không thay file `.env` hiện có**.
+## Cài đặt từng bước (máy Windows 11)
 
-**2.2.** Trong `backend/.env` hiện có, bổ sung các dòng (thay `YOUR_GEMINI_API_KEY` bằng key Gemini Free Tier của bạn, không gửi key vào chat):
+### 1. Sao lưu và copy
 
-```dotenv
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
-GEMINI_MODEL=gemini-2.5-flash
-AI_TIMEOUT_MS=25000
-```
+1. Dừng Backend & Frontend, sao lưu code project và PostgreSQL.
+2. Giải nén ZIP. Copy **gộp** hai thư mục `backend/` và `frontend/` vào `D:\wordspace\Project API Monitor\`, ghi đè đúng 4 file liệt kê ở trên; KHÔNG xóa các thư mục có sẵn.
+3. Đừng copy đè file `.env` thực tế. File `.env.push.example` chỉ là mẫu.
 
-Chọn Google AI Studio project ở **Free Tier**, KHÔNG liên kết billing/nâng cấp Paid Tier. Kiểm tra model và quota hiện có trên AI Studio trước khi chạy. Key không tự chứng minh project thuộc Free Tier; Free Tier có quota và có thể không khả dụng với một số account/khu vực/model. Nếu bị 403/404/429, xem bảng lỗi bên dưới thay vì nâng cấp trả phí. Đừng commit `.env` lên Git. Khởi động lại Backend sau khi sửa `.env`.
-
-**2.3.** DỪNG Backend (Ctrl+C). Mở PowerShell terminal ở `D:\wordspace\Project API Monitor\backend`:
+### 2. Cài dependency, tạo VAPID một lần
 
 ```powershell
 cd "D:\wordspace\Project API Monitor\backend"
-node scripts/apply-ai-schema.mjs
+npm install web-push
+npx web-push generate-vapid-keys --json
+```
+
+Lệnh sẽ in một cặp `publicKey` và `privateKey`; giữ private key bí mật, **không gửi vào chat**. Chỉ tạo một cặp cho hệ thống này; thay key sau khi user đã đăng ký sẽ yêu cầu bật Push lại.
+
+Thêm **ba dòng** này vào `backend/.env` hiện có (giữ tất cả cấu hình cũ):
+
+```dotenv
+VAPID_PUBLIC_KEY=KEY_PUBLIC_VUA_TAO
+VAPID_PRIVATE_KEY=KEY_PRIVATE_VUA_TAO
+VAPID_SUBJECT=mailto:email-cua-may@example.com
+```
+
+`VAPID_SUBJECT` cần là địa chỉ liên hệ dạng `mailto:` hợp lệ của mày. Không ghi `https://localhost` vào subject.
+
+### 3. Prisma migration (giữ data)
+
+```powershell
+cd "D:\wordspace\Project API Monitor\backend"
+node scripts/apply-push-schema.mjs
 npx prisma validate
-npx prisma migrate dev --name ai_incident_analysis
+npx prisma migrate dev --name web_push_v31
 npx prisma generate
-node --test test/aiDiagnosis.test.js test/geminiProvider.test.js
+```
+
+Script lưu `prisma/schema.prisma.before-push-v31.bak` và bổ sung `PushSubscription`, `PushDelivery` + enum `PushDeliveryStatus`, quan hệ `User` và `Notification`. Chạy lại script không nhân đôi model.
+
+**Nếu Prisma yêu cầu reset DB: KHÔNG đồng ý.** Gửi nguyên log để xử lý an toàn. Chỉ chạy migration khi AI v3.0 đã migrate và chạy bình thường.
+
+### 4. Chạy và bật Push
+
+```powershell
+cd "D:\wordspace\Project API Monitor\backend"
+node --test test/pushRules.test.js
 npm run dev
 ```
 
-Script schema chỉ thêm quan hệ `Incident.analyses` và model `IncidentAnalysis` vào **schema hiện tại**; không thay các model khác. Script tạo backup `prisma/schema.prisma.before-ai-v3.bak`. Lệnh `migrate dev` sẽ tạo migration PostgreSQL; **kiểm tra trạng thái migration và backup DB** trước khi chạy (không dùng `db push --force-reset`). Nếu Prisma báo drift hoặc yêu cầu reset DB, **KHÔNG xác nhận reset**, giữ nguyên database và gửi lỗi.
-
-Nếu lệnh `node scripts/apply-ai-schema.mjs` báo đã tồn tại `IncidentAnalysis`, có thể chạy validate/migration bình thường.
-
-Nếu API trả `AI_NOT_CONFIGURED`, kiểm tra GEMINI_API_KEY tại Backend và khởi động lại server; không cần cung cấp key cho Frontend.
-
-## 3. Thiết lập Frontend
-
-Copy gộp các file `frontend/src` từ ZIP vào `D:\wordspace\Project API Monitor\frontend\src`, sao lưu `src/pages/IncidentDetail.jsx` trước.
+Terminal khác:
 
 ```powershell
 cd "D:\wordspace\Project API Monitor\frontend"
@@ -71,67 +81,62 @@ npm run build
 npm run dev
 ```
 
-Đăng nhập, mở `http://localhost:5173/incidents`, bấm một Incident → trang chi tiết có phần **AI Incident Analysis**. Nút **Analyze with AI** gọi Backend, **không lưu key vào Frontend**. Sau khi phân tích thành công, kết quả và lịch sử được hiển thị.
+Mở Chrome `http://localhost:5173/notifications`, đăng nhập. Ở đầu trang, bấm **Bật cảnh báo Push** -> **Allow** khi Chrome hỏi quyền. Badge chuyển **Đã bật**.
 
-## 4. API mới
+Không nên mở giao diện bằng `http://127.0.0.1:5173` rồi lúc khác `localhost:5173`, vì Push subscription gắn với **origin** (domain + port).
 
-Cần Bearer JWT từ API Monitor; Response do `apiFetch` tự unwrap `{success:true,data}`.
+## Hợp đồng API mới
 
-| Method | URL | Response |
+Mọi API cần JWT và trả `{success:true,data}` theo apiFetch đang dùng.
+
+```http
+GET    /api/v1/push/vapid-public-key
+POST   /api/v1/push/subscriptions
+DELETE /api/v1/push/subscriptions
+```
+
+Payload đăng ký gửi từ browser `PushSubscription.toJSON()`: `{endpoint,expirationTime,keys:{p256dh,auth}}`. Payload xóa: `{endpoint}`. Server chỉ nhận push endpoints thuộc FCM, Firefox Push hoặc Apple Push và từ chối URL tùy ý/localhost nhằm giảm nguy cơ SSRF. Mỗi tài khoản tối đa 10 subscription.
+
+## 14 test case tích hợp (PUSH31)
+
+| ID | Cách làm | PASS khi |
 |---|---|---|
-| POST | `/api/v1/incidents/:incidentId/analyze` | 201, `{id,incidentId,model,diagnosis,createdAt}` |
-| GET | `/api/v1/incidents/:incidentId/analyses?limit=10` | 200, `{items,hasMore,nextCursor}` |
-| GET | `/api/v1/incidents/:incidentId/analyses/:analysisId` | 200, một phân tích |
+| PUSH31-01 | Chạy `node --test test/pushRules.test.js` | 12/12 PASS |
+| PUSH31-02 | Chạy Prisma validate, migrate, generate | `PushSubscription`, `PushDelivery` có trong Prisma Studio |
+| PUSH31-03 | Chạy `npm run build` & `npm run dev` cho Backend | Build OK, không báo `PUSH_NOT_CONFIGURED` |
+| PUSH31-04 | Mở `/notifications`, nhấn **Bật cảnh báo Push**, cho phép Chrome | UI “Đã bật”, Prisma Studio có `PushSubscription` |
+| PUSH31-05 | Tạo Monitor từ GET `/status/200`, để status UP | Không có thông báo DOWN giả |
+| PUSH31-06 | Đổi URL sang `https://httpbin.org/status/503`, chờ failure threshold | Incident OPEN, Notification OPENED, Push hiện ở góc Windows |
+| PUSH31-07 | Đóng TAB website sau khi bật Push, giữ Chrome/system hỗ trợ Push & Backend chạy; tạo một sự cố mới | Có thông báo desktop dù tab đóng |
+| PUSH31-08 | Click Push mới đến | Mở `/incidents/<id>`, yêu cầu đăng nhập nếu chưa có session |
+| PUSH31-09 | Đổi URL lại `/status/200`, chờ recovery threshold | Incident RESOLVED và Push phục hồi |
+| PUSH31-10 | Giữ Monitor ở DOWN ít nhất 3 lần check nữa | Không phát Push OPENED trùng cho cùng Incident |
+| PUSH31-11 | Bấm **Tắt cảnh báo** trong Notifications, sau đó tạo một Incident mới | `PushSubscription` bị xóa, không phát Push, In-app Notification vẫn có |
+| PUSH31-12 | Bật lại, **Sign out** | Subscription được hủy, không tiếp tục nhận cảnh báo tài khoản cũ (nếu mạng hoạt động) |
+| PUSH31-13 | Test sai `endpoint` dùng Thunder Client với JWT | HTTP 400 `INVALID_PUSH_SUBSCRIPTION` |
+| PUSH31-14 | Tắt Backend 30 giây sau khi có queue PENDING; khởi động lại và quan sát | Job còn trong DB, worker xử lý lại. Kiểm tra `PushDelivery.status` |
 
-`diagnosis` gồm `summary`, `confidence`, `possibleCauses`, `recommendedActions`, `evidence`, `limitations`. Các trường văn bản là thông tin AI đưa ra, không phải kết luận hệ thống đã xác thực.
+**Cách tạo sự cố mới ở PUSH31-07:** Monitor đang DOWN sẽ không phát OPENED lần nữa. Trước tiên phục hồi UP, sau đó đổi sang 503 để tạo Incident mới. Có thể dùng Monitor thứ hai để tránh ảnh hưởng test cũ.
 
-Lỗi dự kiến: `INCIDENT_NOT_FOUND`/`AI_RESOURCE_NOT_FOUND` (404), `AI_NOT_CONFIGURED` (503), `AI_COOLDOWN`/`AI_LIMIT_REACHED` (429), `AI_ANALYSIS_IN_PROGRESS` (409), `AI_RATE_LIMITED` (429), `AI_ACCESS_DENIED` (502), `AI_MODEL_UNAVAILABLE` (502), `AI_PROVIDER_ERROR`/`AI_PROVIDER_UNAVAILABLE`/`AI_RESPONSE_INVALID` (502), `VALIDATION_ERROR` (400). Lỗi nhà cung cấp không phản hồi thẳng raw response.
+### SQL / Prisma Studio chẩn đoán
 
-## 5. Bộ test tổng v3.0
+Dùng `npx prisma studio`, xem:
+- `PushSubscription`: dòng subscription của thiết bị đã đăng ký
+- `PushDelivery`: trạng thái `PENDING` → `PROCESSING` → `SENT`; lỗi `FAILED` xem `lastError` (chỉ lưu mã trạng thái không lưu secrets)
+- `Notification`: OPENED/RESOLVED gắn với Incident
 
-**Chuẩn bị:** Backend + Frontend + PostgreSQL chạy, đã migrate/generate, có 1 Incident (trạng thái OPEN hoặc RESOLVED), đã đăng nhập. Gọi AI dùng hạn mức Free Tier nếu project thực sự ở cấp miễn phí; KHÔNG bật billing. Kiểm tra tối thiểu 1 phân tích thành công, không cần cố gọi đủ 5 lần chỉ để kiểm tra hạn mức.
+`SENT` nghĩa là dịch vụ Push đã chấp nhận thông báo, **không đảm bảo** Windows/trình duyệt đã hiển thị. Nếu Windows bật Do Not Disturb / Chrome chặn notifications, có thể nhận được ở Notification Center thay vì toast.
 
-| ID | Thao tác chính | PASS khi |
-|---|---|---|
-| AI30-01 | `npx prisma validate`, `migrate dev`, `generate` | Database có bảng `incident_analyses`, không mất bảng cũ |
-| AI30-02 | `node --test test/aiDiagnosis.test.js test/geminiProvider.test.js` | 18/18 PASS (trong đó có provider mock tests) |
-| AI30-03 | `npm run build`, mở Incident Detail | Build thành công, panel hiện và các trường Incident v2.1 giữ nguyên |
-| AI30-04 | Truy cập Incident đã có, chưa phân tích | Có empty state lịch sử |
-| AI30-05 | Bấm **Analyze with AI** (tài khoản có API key/hạn mức) | 201, xuất hiện `summary` và bước xử lý rõ ràng |
-| AI30-06 | Sau khi tạo, reload Incident Detail | Lịch sử còn lưu trong PostgreSQL |
-| AI30-07 | Click kết quả trong lịch sử | Chuyển đúng nội dung phân tích tương ứng |
-| AI30-08 | Thunder Client GET `.../incidents/INCIDENT_ID/analyses?limit=1` | 200, cấu trúc `{items,hasMore,nextCursor}` |
-| AI30-09 | Thunder Client GET `.../incidents/INCIDENT_ID/analyses/ANALYSIS_ID` | ID và Incident ID chính xác |
-| AI30-10 | Bấm lại ngay dưới 60 giây | HTTP 429 `AI_COOLDOWN`, không tiêu thêm lượt gọi Gemini |
-| AI30-11 | Đổi tạm GEMINI_API_KEY thành trống, restart Backend, bấm phân tích cho Incident chưa có lịch sử | 503 `AI_NOT_CONFIGURED`; khôi phục key sau test |
-| AI30-12 | GET `/api/v1/incidents/INVALID_UUID/analyses` | 404, không lộ dữ liệu |
-| AI30-13 | GET `/api/v1/incidents/INCIDENT_ID/analyses?limit=999` | 400 `VALIDATION_ERROR` |
-| AI30-14 | Gửi request thiếu JWT tới API AI | 401, không lấy được lịch sử |
-| AI30-15 | Prisma Studio → bảng `IncidentAnalysis` → xem diagnosis | Không có token, URL, header, body, credentials trong **input metadata lưu vào history** (lưu ý đầu ra AI là văn bản tự sinh) |
-| AI30-16 | Mở app trên màn hình 375px (Chrome DevTools Ctrl+Shift+M) | Panel, các list và nút không vỡ bố cục |
-| AI30-17 | Regression: Monitor UP/DOWN, Incident OPEN/RESOLVED, Notifications, Analytics | Không chức năng cũ nào hỏng |
-| AI30-18 | Tài khoản khác truy cập Incident/analysis của chủ sở hữu | 404; có thể tạm hoãn cho demo nhưng không được coi PASS |
+### Các giới hạn thực tế
 
-**Cách quan sát request:** Chrome F12 → Network → Fetch/XHR → nhấn Analyze → chọn `/api/v1/incidents/<ID>/analyze` → Response. **Cách quan sát DB:** ở terminal Backend chạy `npx prisma studio` rồi xem `IncidentAnalysis`. API key chỉ nằm trong `.env` và request Backend → Gemini, **không có trong DevTools Network của Frontend**.
+1. Backend phải chạy. Nếu laptop Sleep/tắt, không có sự kiện Monitor/Push.
+2. Mỗi browser/device phải tự bật thông báo. Nếu xóa site data, cần đăng ký lại.
+3. Khi đóng tab, một số trình duyệt có thể nhận Push; khi **thoát hẳn Chrome**, hành vi tùy phiên bản, hệ điều hành và background mode, cần test riêng.
+4. Không gửi API URL, request headers, body, secrets hoặc kết quả Gemini ra Push; chỉ thông báo sự cố và link Incident.
+5. Worker thực thi retry tối đa 4 lượt, sử dụng hàng đợi PostgreSQL. Nếu chết tiến trình sau khi dịch vụ Push chấp nhận nhưng trước khi ghi SENT, có thể gửi lại (at-least-once); notification `tag` giúp trình duyệt thay thế bản trước thay vì hiện nhiều toast trong phần lớn trường hợp.
+6. Không gửi lại thông báo cũ cho người đăng ký mới; PushDelivery chỉ tạo cùng transaction với Notification khi subscription đã bật.
+7. Nên dùng Chrome localhost để demo; chưa kiểm thử trên iOS Safari. Trên iPhone nhận Web Push thường đòi hỏi app được thêm vào Home Screen và host HTTPS thật.
 
-**Kịch bản demo cuối cùng:** API 200 → đổi Request Studio sang 503 → Monitor chuyển DOWN → Incident OPEN → Notification OPENED → mở Incident Detail và bấm Analyze with AI → AI phân tích 503, gợi ý kiểm tra log/upstream → phục hồi URL 200 → Incident RESOLVED. Nếu đã phân tích Incident, phần History vẫn xem được sau khi phục hồi.
+## Regression cần kiểm tra
 
-## 6. Lưu ý trước khi đưa lên internet
-
-- Giới hạn hiện dùng `Set` trong một Node process, không chống đồng thời nhiều replica. Cần dùng DB lock/job queue/limits theo user và billing quotas nếu triển khai công khai.
-- Chỉ dùng Gemini Free Tier, không bật billing. Nếu sau này đổi sang trả phí, cần rate limit và budget cap. Giữ key ở Backend, không log key.
-- Phân tích chỉ theo metadata; không phải log ứng dụng nên AI **không thể xác định chắc root cause**. Không tự sửa code hay chạy lệnh.
-- Khi xóa Monitor thì Incident và analyses sẽ cascade theo schema hiện hành.
-- Nếu có lỗi migration, không reset DB để thử. Kiểm tra và sửa migration an toàn trước.
-
-
-## 6. Lưu ý riêng cho bản Gemini Free
-
-- File ZIP này **đã thay** `backend/src/services/aiProvider.service.js` từ OpenAI Responses API sang Google Gemini `generateContent` REST, và cập nhật `.env.ai.example`. Không cần cài thư viện npm mới. Phần còn lại (schema, backend routes, frontend) giữ nguyên so với gói AI v3.0.
-- Chỉ thêm cấu hình `GEMINI_API_KEY`, `GEMINI_MODEL`, `AI_TIMEOUT_MS` vào file **`backend/.env` đang có**. Không tạo `.env` thứ hai, không copy đè `.env`, không gửi key cho người khác.
-- **Tạo project Free Tier chưa gắn thanh toán** trên https://aistudio.google.com/apikey . Model `gemini-2.5-flash` có mức Free Tier được ghi trong bảng giá Google, nhưng tình trạng model/quota thực tế tùy project; tài khoản mới có thể bị 404 hoặc 403. Không có failover tự động sang dịch vụ tính phí.
-- Nếu model mặc định không dùng được, kiểm tra model Free Tier được cấp trong Google AI Studio rồi đổi `GEMINI_MODEL` trong `.env` (không sửa source).
-- Lỗi `AI_RATE_LIMITED` nghĩa là quota đã hết: dừng thử, chờ quota reset, **không nâng cấp Paid Tier**. `AI_MODEL_UNAVAILABLE` là model không khả dụng với project; `AI_ACCESS_DENIED` thường liên quan key/quyền/Free Tier.
-- **Không thể đảm bảo 0đ chỉ bằng code** nếu project được nâng cấp billing về sau. Để tránh phát sinh phí, không bật billing và chỉ sử dụng project Free Tier.
-- Tài liệu chính thức về Free Tier: https://ai.google.dev/gemini-api/docs/pricing . Google cho biết nội dung Free Tier có thể được sử dụng để cải thiện sản phẩm; hệ thống chỉ truyền metadata đã lọc và không gửi dữ liệu nhạy cảm.
-- Test provider không cần mạng và không tiêu quota: `node --test test/geminiProvider.test.js`. Test tích hợp AI thật vẫn phải chạy với key chính chủ.
+Monitoring UP/DOWN; Notification In-app; Incident OPEN/RESOLVED; Gemini Analyze; Analytics Dashboard; auth/logout; lịch sử; Worker restart. Cơ chế Push độc lập với việc gọi AI, nên không làm phát sinh phí Gemini.
